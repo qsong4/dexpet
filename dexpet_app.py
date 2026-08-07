@@ -13,14 +13,61 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
+from datetime import datetime
 
 from backend.paths import DEFAULT_HOST, DEFAULT_PORT
 
 
 def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
+
+
+def _setup_frozen_logging() -> None:
+    """Windowed .app has no console; tee stdout/stderr to Application Support."""
+    if not _is_frozen():
+        return
+    try:
+        from backend.paths import log_dir
+
+        log_path = log_dir() / "app.log"
+        log_f = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+        log_f.write(f"\n==== start {datetime.now().isoformat()} ====\n")
+        log_f.flush()
+
+        class _Tee:
+            def __init__(self, *streams):
+                self._streams = streams
+
+            def write(self, data: str) -> int:
+                for s in self._streams:
+                    try:
+                        s.write(data)
+                        s.flush()
+                    except Exception:
+                        pass
+                return len(data)
+
+            def flush(self) -> None:
+                for s in self._streams:
+                    try:
+                        s.flush()
+                    except Exception:
+                        pass
+
+        sys.stdout = _Tee(sys.__stdout__, log_f)  # type: ignore[assignment]
+        sys.stderr = _Tee(sys.__stderr__, log_f)  # type: ignore[assignment]
+
+        def _excepthook(exc_type, exc, tb) -> None:
+            traceback.print_exception(exc_type, exc, tb)
+            if sys.__excepthook__ is not _excepthook:
+                sys.__excepthook__(exc_type, exc, tb)
+
+        sys.excepthook = _excepthook
+    except Exception:
+        pass
 
 
 def _backend_cmd() -> list[str]:
@@ -95,6 +142,8 @@ def run_app() -> None:
 
 
 def main() -> None:
+    _setup_frozen_logging()
+
     if not _is_frozen():
         root = os.path.dirname(os.path.abspath(__file__))
         if root not in sys.path:

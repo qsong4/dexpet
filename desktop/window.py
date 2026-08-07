@@ -161,9 +161,15 @@ class PetWindow(QWidget):
         self._position_bubble()
 
     def _check_live2d_gl_ready(self) -> None:
+        # Live2DPetWidget sets _ready after initializeGL. If the GL context never
+        # comes up (common when shaders are missing from a frozen .app), load_error
+        # stays None and the translucent window looks like a failed launch.
+        ready = getattr(self.sprite, "_ready", True)
         err = getattr(self.sprite, "load_error", None)
-        if not err:
+        if ready and not err:
             return
+        if not err:
+            err = "Live2D OpenGL 未就绪（将回退精灵帧）"
         print(f"DexPet Live2D GL fallback: {err}", flush=True)
         self._live2d_status = {
             **self._live2d_status,

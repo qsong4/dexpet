@@ -8,6 +8,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 block_cipher = None
 ROOT = Path(SPECPATH).resolve().parent
 ENTRY = str(ROOT / "dexpet_app.py")
+HOOKS = str(ROOT / "packaging" / "hooks")
 
 datas = []
 binaries = []
@@ -33,6 +34,7 @@ hiddenimports = [
     "backend.core.config_service",
     "backend.core.secrets",
     "backend.core.llm.openai_compatible",
+    "backend.core.pet_display",
     "backend.plugins.reminder",
     "backend.db.repository",
     "backend.db.schema",
@@ -41,20 +43,30 @@ hiddenimports = [
     "desktop.window",
     "desktop.ws_client",
     "desktop.sprite_animator",
+    "desktop.pet_factory",
+    "desktop.live2d_widget",
+    "desktop.live2d_runtime",
     "shared.messages",
+    "shared.live2d_config",
     "keyring.backends",
     "keyring.backends.macOS",
+    "live2d",
+    "live2d.v3",
+    "live2d.v3.lapp_model",
+    "live2d.v3.params",
 ]
 
-tmp_ret = collect_all("uvicorn")
-datas += tmp_ret[0]
-binaries += tmp_ret[1]
-hiddenimports += tmp_ret[2]
-
-tmp_ret = collect_all("fastapi")
-datas += tmp_ret[0]
-binaries += tmp_ret[1]
-hiddenimports += tmp_ret[2]
+for pkg in ("uvicorn", "fastapi", "live2d"):
+    try:
+        tmp_ret = collect_all(pkg)
+    except Exception:
+        # live2d is optional; skip if not installed in the build env
+        if pkg == "live2d":
+            continue
+        raise
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
 
 hiddenimports += collect_submodules("apscheduler")
 
@@ -64,9 +76,11 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    hookspath=[HOOKS] if Path(HOOKS).is_dir() else [],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(Path(HOOKS) / "rthook_live2d.py")]
+    if (Path(HOOKS) / "rthook_live2d.py").is_file()
+    else [],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
