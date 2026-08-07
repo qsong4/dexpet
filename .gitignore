@@ -1,0 +1,31 @@
+# DexPet
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.app
+.DS_Store
+.env
+*.db
+api_keys.json
+**/credentials*.json
+*.pem
+*.key
+
+# Live2D models / Cubism runtime blobs (keep README only)
+desktop/assets/live2d/**
+!desktop/assets/live2d/README.md
+*.moc
+*.moc3
+*.model.json
+*.model3.json
+*.physics3.json
+*.cdi3.json
+*.pose3.json
+*.motion3.json
+*.exp3.json

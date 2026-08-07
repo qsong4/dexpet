@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dexpet"
+version = "0.1.0"
+description = "macOS desktop pet assistant (DexPet)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "websockets>=13.0",
+    "openai>=1.55.0",
+    "pyside6-essentials>=6.8.0",
+    "apscheduler>=3.10.4",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "keyring>=25.5.0",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.12",
+    "trafilatura>=1.12.0",
+]
+
+[project.optional-dependencies]
+stock = [
+    "akshare>=1.14.0",
+]
+live2d = [
+    "live2d-py>=0.7.0",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-httpx>=0.34.0",
+    "pyinstaller>=6.11.0",
+]
+
+[project.scripts]
+dexpet = "dexpet_app:main"
+dexpet-backend = "backend.main:run"
+dexpet-desktop = "desktop.main:run"
+
+[tool.setuptools]
+py-modules = ["dexpet_app"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "desktop*", "shared*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
