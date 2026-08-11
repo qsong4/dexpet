@@ -12,10 +12,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from backend.paths import DEFAULT_HOST, DEFAULT_PORT  # noqa: E402
+
 PY = ROOT / ".venv" / "bin" / "python"
 PID_DIR = Path.home() / "Library" / "Application Support" / "DexPet"
 LOG_DIR = PID_DIR / "logs"
-BACKEND_PORT = 8765
+BACKEND_PORT = DEFAULT_PORT
 
 # Cursor agent seatbelt env markers (Keychain writes fail under seatbelt).
 _SANDBOX_ENV_PREFIXES = ("CURSOR_SANDBOX", "__CURSOR_SANDBOX")
@@ -108,7 +111,9 @@ def _wait_health(timeout: float = 10.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen("http://127.0.0.1:8765/health", timeout=1) as r:
+            with urllib.request.urlopen(
+                f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/health", timeout=1
+            ) as r:
                 if r.status == 200:
                     return True
         except Exception:  # noqa: BLE001
@@ -144,7 +149,10 @@ def main() -> int:
         subprocess.run(["kill", "-0", str(bpid)], capture_output=True).returncode == 0
     )
     alive_d = subprocess.run(["kill", "-0", str(dpid)], capture_output=True).returncode == 0
-    print(f"backend={bpid} alive={alive_b} desktop={dpid} alive={alive_d}")
+    print(
+        f"port={DEFAULT_PORT} backend={bpid} alive={alive_b} "
+        f"desktop={dpid} alive={alive_d}"
+    )
     return 0 if alive_b and alive_d else 1
 
 

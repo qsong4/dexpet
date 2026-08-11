@@ -7,6 +7,7 @@ Dev mode: backend runs as a subprocess.
 from __future__ import annotations
 
 import atexit
+import io
 import os
 import signal
 import subprocess
@@ -57,6 +58,35 @@ def _setup_frozen_logging() -> None:
                     except Exception:
                         pass
 
+            def isatty(self) -> bool:
+                # uvicorn logging probes stdout.isatty(); file tee is not a TTY.
+                return False
+
+            def fileno(self) -> int:
+                for s in self._streams:
+                    try:
+                        return s.fileno()
+                    except Exception:
+                        continue
+                raise io.UnsupportedOperation("fileno")
+
+            @property
+            def encoding(self) -> str:
+                for s in self._streams:
+                    enc = getattr(s, "encoding", None)
+                    if enc:
+                        return enc
+                return "utf-8"
+
+            def readable(self) -> bool:
+                return False
+
+            def writable(self) -> bool:
+                return True
+
+            def seekable(self) -> bool:
+                return False
+
         sys.stdout = _Tee(sys.__stdout__, log_f)  # type: ignore[assignment]
         sys.stderr = _Tee(sys.__stderr__, log_f)  # type: ignore[assignment]
 
@@ -88,16 +118,29 @@ def _wait_health(timeout: float = 20.0) -> bool:
 
 
 def run_backend() -> None:
-    import uvicorn
+    try:
+        import uvicorn
 
-    from backend.app import create_app
+        from backend.app import create_app
 
-    app = create_app()
-    uvicorn.run(app, host=DEFAULT_HOST, port=DEFAULT_PORT, log_level="warning")
+        print(f"DexPet backend starting on {DEFAULT_HOST}:{DEFAULT_PORT}", flush=True)
+        app = create_app()
+        print("DexPet backend create_app ok", flush=True)
+        uvicorn.run(app, host=DEFAULT_HOST, port=DEFAULT_PORT, log_level="warning")
+    except Exception:
+        traceback.print_exc()
+        raise
 
 
 def _start_backend_thread() -> threading.Thread:
-    thread = threading.Thread(target=run_backend, name="dexpet-backend", daemon=True)
+    def _target() -> None:
+        try:
+            run_backend()
+        except Exception:
+            # Daemon thread errors otherwise vanish; keep them in app.log.
+            traceback.print_exc()
+
+    thread = threading.Thread(target=_target, name="dexpet-backend", daemon=True)
     thread.start()
     return thread
 
@@ -130,8 +173,21 @@ def run_app() -> None:
         else:
             _start_backend_subprocess()
         if not _wait_health():
+            busy = ""
+            try:
+                import socket
+
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.3)
+                    if s.connect_ex((DEFAULT_HOST, DEFAULT_PORT)) == 0:
+                        busy = (
+                            f" (port {DEFAULT_PORT} is occupied but /health did not "
+                            "respond — stop other DexPet/backend processes and retry)"
+                        )
+            except OSError:
+                pass
             print(
-                f"DexPet backend failed to start on port {DEFAULT_PORT}",
+                f"DexPet backend failed to start on port {DEFAULT_PORT}{busy}",
                 file=sys.stderr,
             )
             sys.exit(1)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -29,10 +30,58 @@ def test_set_api_key_falls_back_to_file_when_keyring_fails(tmp_path, monkeypatch
 
 def test_get_api_key_prefers_keyring_over_file(tmp_path, monkeypatch):
     monkeypatch.setattr(secrets, "data_dir", lambda: tmp_path)
+    monkeypatch.delenv("DEXPET_SECRETS_FILE_ONLY", raising=False)
     secrets._set_file_key("llm_api_key_custom", "from-file")
 
     with patch.object(secrets.keyring, "get_password", return_value="from-keyring"):
         assert secrets.get_api_key("custom") == "from-keyring"
+
+
+def test_frozen_get_api_key_skips_keyring(tmp_path, monkeypatch):
+    """Packaged .app must not touch Keychain on read (startup ACL prompt)."""
+    monkeypatch.setattr(secrets, "data_dir", lambda: tmp_path)
+    monkeypatch.setenv("DEXPET_SECRETS_FILE_ONLY", "1")  # mirrors frozen prefer-file
+    secrets._set_file_key("llm_api_key_custom", "from-file")
+
+    with patch.object(secrets.keyring, "get_password") as mock_get:
+        assert secrets.get_api_key("custom") == "from-file"
+        mock_get.assert_not_called()
+
+
+def test_frozen_set_api_key_writes_file_only(tmp_path, monkeypatch):
+    """Packaged .app: persist to file without Keychain write prompts."""
+    monkeypatch.setattr(secrets, "data_dir", lambda: tmp_path)
+    monkeypatch.setenv("DEXPET_SECRETS_FILE_ONLY", "1")
+
+    with patch.object(secrets.keyring, "set_password") as mock_set:
+        secrets.set_api_key("sk-packaged", "custom")
+        mock_set.assert_not_called()
+
+    with patch.object(secrets.keyring, "get_password") as mock_get:
+        assert secrets.get_api_key("custom") == "sk-packaged"
+        mock_get.assert_not_called()
+    assert (tmp_path / "secrets" / "api_keys.json").is_file()
+
+
+def test_file_only_env_skips_keyring(tmp_path, monkeypatch):
+    monkeypatch.setattr(secrets, "data_dir", lambda: tmp_path)
+    monkeypatch.setenv("DEXPET_SECRETS_FILE_ONLY", "1")
+    secrets._set_file_key("llm_api_key_deepseek", "env-file")
+
+    with patch.object(secrets.keyring, "get_password") as mock_get:
+        assert secrets.get_api_key("deepseek") == "env-file"
+        mock_get.assert_not_called()
+
+
+def test_frozen_flag_skips_keyring(tmp_path, monkeypatch):
+    monkeypatch.setattr(secrets, "data_dir", lambda: tmp_path)
+    monkeypatch.delenv("DEXPET_SECRETS_FILE_ONLY", raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    secrets._set_file_key("llm_api_key_custom", "from-file")
+
+    with patch.object(secrets.keyring, "get_password") as mock_get:
+        assert secrets.get_api_key("custom") == "from-file"
+        mock_get.assert_not_called()
 
 
 def test_delete_api_key_clears_file_fallback(tmp_path, monkeypatch):

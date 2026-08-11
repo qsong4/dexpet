@@ -1,8 +1,8 @@
-"""Keychain helpers for per-profile API keys, with file fallback.
+"""API key storage: Keychain with file fallback.
 
-macOS Keychain writes fail under some environments (e.g. Cursor seatbelt
-sandbox → keyring error 100001). When that happens we persist keys under
-Application Support so settings «保存模型» still succeeds.
+Frozen (.app) and DEXPET_SECRETS_FILE_ONLY=1 prefer Application Support
+file store so launch never blocks on macOS Keychain ACL prompts.
+Dev mode still uses Keychain first; writes fall back to file on failure.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
 import keyring
@@ -19,6 +20,13 @@ from backend.paths import KEYCHAIN_SERVICE, KEYCHAIN_USERNAME, data_dir
 logger = logging.getLogger(__name__)
 
 ProfileName = str  # "deepseek" | "custom" | uuid
+
+
+def _prefer_file_store() -> bool:
+    """Skip Keychain when packaged or explicitly requested."""
+    if os.environ.get("DEXPET_SECRETS_FILE_ONLY", "").strip() in {"1", "true", "yes"}:
+        return True
+    return bool(getattr(sys, "frozen", False))
 
 
 def _username(profile: ProfileName | None = None) -> str:
@@ -82,11 +90,13 @@ def _get_file_key(username: str) -> str | None:
 def get_api_key(profile: ProfileName | None = None) -> str | None:
     """Get key for a profile. Legacy single-key slot used only when profile is None."""
     username = _username(profile) if profile else KEYCHAIN_USERNAME
+    if _prefer_file_store():
+        return _get_file_key(username)
     try:
         value = keyring.get_password(KEYCHAIN_SERVICE, username)
         if value:
             return value
-    except Exception:  # noqa: BLE001 — Keychain may be locked / sandboxed
+    except Exception:  # noqa: BLE001 — Keychain may be locked / sandboxed / modal
         logger.debug("keyring get_password failed for %s", username, exc_info=True)
     return _get_file_key(username)
 
@@ -96,6 +106,11 @@ def set_api_key(api_key: str, profile: ProfileName | None = None) -> None:
     if profile is not None:
         # Keep legacy slot in sync with whatever was last written (compat).
         usernames.append(KEYCHAIN_USERNAME)
+
+    if _prefer_file_store():
+        for name in usernames:
+            _set_file_key(name, api_key)
+        return
 
     try:
         for name in usernames:
@@ -116,10 +131,11 @@ def set_api_key(api_key: str, profile: ProfileName | None = None) -> None:
 
 def delete_api_key(profile: ProfileName | None = None) -> None:
     username = _username(profile)
-    try:
-        keyring.delete_password(KEYCHAIN_SERVICE, username)
-    except keyring.errors.PasswordDeleteError:
-        pass
-    except Exception:  # noqa: BLE001
-        logger.debug("keyring delete_password failed for %s", username, exc_info=True)
+    if not _prefer_file_store():
+        try:
+            keyring.delete_password(KEYCHAIN_SERVICE, username)
+        except keyring.errors.PasswordDeleteError:
+            pass
+        except Exception:  # noqa: BLE001
+            logger.debug("keyring delete_password failed for %s", username, exc_info=True)
     _clear_file_key(username)

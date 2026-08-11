@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 APP_NAME = "DexPet"
 KEYCHAIN_SERVICE = "dexpet"
 KEYCHAIN_USERNAME = "llm_api_key"
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = int(os.environ.get("DEXPET_PORT", "8765"))
 WS_PATH = "/ws"
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"

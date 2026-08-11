@@ -8,7 +8,8 @@ API_KEY="${1:?api_key required}"
 BASE_URL="${2:-https://api.deepseek.com}"
 MODEL="${3:-deepseek-chat}"
 PRESET="${4:-deepseek}"
-curl -sS -X PUT "http://127.0.0.1:8765/config" \
+PORT="${DEXPET_PORT:-8765}"
+curl -sS -X PUT "http://127.0.0.1:${PORT}/config" \
   -H 'Content-Type: application/json' \
   -d "{\"provider_preset\":\"${PRESET}\",\"base_url\":\"${BASE_URL}\",\"model\":\"${MODEL}\",\"api_key\":\"${API_KEY}\"}"
 echo
