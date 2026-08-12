@@ -418,6 +418,9 @@ class ChatBubble(QFrame):
         self.show()
         self.raise_()
         self.update()
+        if self._reply_scroll.isVisible():
+            self._fit_reply_scroll()
+            self._scroll_reply_to_top()
         self._anim.stop()
         self._disconnect_hide()
         self._anim.setStartValue(self._opacity.opacity())
@@ -456,6 +459,7 @@ class ChatBubble(QFrame):
 
     def _fit_reply_scroll(self) -> None:
         if not self.reply.isVisible() and not self.reply.text():
+            self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._reply_scroll.setFixedHeight(0)
             return
         content_w = self._reply_content_width()
@@ -463,12 +467,20 @@ class ChatBubble(QFrame):
         needed = self.reply.heightForWidth(content_w)
         if needed < 0:
             needed = self.reply.sizeHint().height()
-        self.reply.setFixedHeight(max(needed, 0))
-        self._reply_scroll.setFixedHeight(max(0, min(needed, REPLY_MAX_H)))
+        needed = max(needed, 0)
+        self.reply.setFixedHeight(needed)
+        # Short replies: size to content and hide scrollbar entirely so Qt
+        # doesn't reserve a track when height ≈ content (rounding edge cases).
+        if needed <= REPLY_MAX_H:
+            self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self._reply_scroll.setFixedHeight(needed)
+        else:
+            self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._reply_scroll.setFixedHeight(REPLY_MAX_H)
 
-    def _scroll_reply_to_bottom(self) -> None:
+    def _scroll_reply_to_top(self) -> None:
         bar = self._reply_scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
+        bar.setValue(0)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -500,11 +512,12 @@ class ChatBubble(QFrame):
             self.reply.show()
             self._reply_scroll.show()
             self._fit_reply_scroll()
-            self._scroll_reply_to_bottom()
+            self._scroll_reply_to_top()
         else:
             self.reply.clear()
             self.reply.hide()
             self._reply_scroll.hide()
+            self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._reply_scroll.setFixedHeight(0)
         self._relayout_content()
 
@@ -518,6 +531,7 @@ class ChatBubble(QFrame):
         self.reply.clear()
         self.reply.hide()
         self._reply_scroll.hide()
+        self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._reply_scroll.setFixedHeight(0)
         self._relayout_content()
 
@@ -530,6 +544,7 @@ class ChatBubble(QFrame):
         self.reply.clear()
         self.reply.hide()
         self._reply_scroll.hide()
+        self._reply_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._reply_scroll.setFixedHeight(0)
         self._thinking_row.show()
         self._thinking_dots.start()
